@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.location.Location;
 import android.os.Bundle;
 import android.provider.MediaStore;
@@ -29,9 +30,19 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.Circle;
+import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.PolylineOptions;
 
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback,
@@ -40,6 +51,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     private GoogleMap mMap;
     private static final int ACCESS_FINE_LOCATION = 1;
+    private static final String FILENAME = "junk_file";
     private GoogleApiClient mGoogleApiClient;
     private Location mLastLocation;
     private Location junk;
@@ -51,7 +63,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private String markerText;
     static final int REQUEST_IMAGE_CAPTURE = 1;
     private ImageView imageView;
-    final Context context = this;
+    private Polyline polyline;
+    private Circle circle;
+    private PolylineOptions polylineOptions;
+    private JunkObject junkObject;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -73,34 +89,36 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         init();
 
+
         marker.setOnClickListener(new View.OnClickListener() {
             public void onClick(View view) {
-                //TODO potientially remove this and make a clear button.
-                mMap.clear();
                 if (mLastLocation == null) {
                     Toast.makeText(getApplicationContext(), "Location Not Found", Toast.LENGTH_SHORT).show();
                 } else {
 
-                    LayoutInflater li = LayoutInflater.from(context);
-                    View promptsView = li.inflate(R.layout.marker_text, null);
+                    AlertDialog.Builder builder = new AlertDialog.Builder(MapsActivity.this);
+                    LayoutInflater inflater = MapsActivity.this.getLayoutInflater();
 
-                    AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(
-                            context);
+                    View markerTextView = inflater.inflate(R.layout.marker_text, null);
 
-                    alertDialogBuilder.setView(promptsView);
+                    builder.setView(markerTextView);
 
-                    final EditText userInput = (EditText) promptsView
+                    final EditText userInput = (EditText) markerTextView
                             .findViewById(R.id.editTextDialogUserInput);
 
-                    alertDialogBuilder
-                            .setCancelable(false)
+                    builder
                             .setPositiveButton("OK",
                                     new DialogInterface.OnClickListener() {
                                         public void onClick(DialogInterface dialog, int id) {
-                                            // get user input and set it to result
-                                            // edit text
+                                            polylineOptions = new PolylineOptions()
+                                                    .width(5)
+                                                    .color(Color.RED)
+                                                    .zIndex(30);
+                                            mMap.clear();
                                             markerText = userInput.getText().toString();
                                             junk = mLastLocation;
+                                            latArray.clear();
+                                            lonArray.clear();
                                             LatLng current = new LatLng(junk.getLatitude(), junk.getLongitude());
                                             mMap.addMarker(new MarkerOptions().position(current).title(markerText));
                                             mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(current, 17.0f));
@@ -113,9 +131,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                                         }
                                     });
 
-                    AlertDialog alertDialog = alertDialogBuilder.create();
+                    AlertDialog alertDialog = builder.create();
 
                     alertDialog.show();
+
+                    startLocationUpdates();
                 }
             }
         });
@@ -137,20 +157,38 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         super.onStop();
     }
 
+    protected void onPause() {
+        super.onPause();
+        if (junkObject != null) {
+            junkObject.setMarkerLat(junk.getLatitude());
+            junkObject.setMarkerLon(junk.getLongitude());
+            junkObject.setMarkerString(markerText);
+            for (LatLng loc : polyline.getPoints()) {
+                latArray.add(loc.latitude);
+                lonArray.add(loc.longitude);
+            }
+            junkObject.setPolyArrayLat(latArray);
+            junkObject.setPolyArrayLon(lonArray);
+            try {
+                FileOutputStream fos = openFileOutput(FILENAME, Context.MODE_PRIVATE);
+                ObjectOutputStream oos = new ObjectOutputStream(fos);
+                oos.writeObject(junkObject);
+                fos.close();
+                oos.close();
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
 
-    /* This callback is triggered when the map is ready to be used.
-     * This is where we can add markers or lines, add listeners or move the camera. In this case,
-     * we just add a marker near Sydney, Australia.
-     * If Google Play services is not installed on the device, the user will be prompted to install
-     * it inside the SupportMapFragment. This method will only be triggered once the user has
-     * installed Google Play services and returned to the app.
-     */
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
 
         if (mLastLocation == null) {
-            LatLng current = new LatLng(15, 0);
+            LatLng current = new LatLng(0, 0);
             mMap.addMarker(new MarkerOptions().position(current).title("Current Location"));
             mMap.moveCamera(CameraUpdateFactory.newLatLng(current));
         } else {
@@ -158,7 +196,13 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             mMap.addMarker(new MarkerOptions().position(current).title("Current Location"));
             mMap.moveCamera(CameraUpdateFactory.newLatLng(current));
         }
+        polylineOptions = new PolylineOptions()
+                .width(5)
+                .color(Color.RED)
+                .zIndex(30);
+        polyline = mMap.addPolyline(polylineOptions);
 
+        initSavedData();
     }
 
     @Override
@@ -170,9 +214,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         mLastLocation = LocationServices.FusedLocationApi.getLastLocation(
                 mGoogleApiClient);
         if (mLastLocation != null) {
-            Toast.makeText(getApplicationContext(), "Location Found!", Toast.LENGTH_SHORT).show();
         } else {
-            Toast.makeText(getApplicationContext(), "Location Not Found", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getApplicationContext(), "Location Not Found!", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -192,8 +235,15 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     @Override
     public void onLocationChanged(Location location) {
         mLastLocation = location;
-        // TODO add functionality to set points for a path back to the stored location
-        storeLocation();
+        LatLng lastLatLng = new LatLng(location.getLatitude(), location.getLongitude());
+        polylineOptions.add(lastLatLng);
+        polyline.remove();
+        polyline = mMap.addPolyline(polylineOptions);
+        if (circle != null) {
+            circle.remove();
+        }
+        circle = mMap.addCircle(new CircleOptions().center(lastLatLng).strokeColor(Color.LTGRAY).fillColor(Color.GRAY).radius(7).strokeWidth(15));
+        mMap.moveCamera(CameraUpdateFactory.newLatLng(lastLatLng));
     }
 
     @Override
@@ -219,13 +269,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
     }
 
-    private void storeLocation() {
-        //TODO add code to store the location data.
-
-        latArray.add(mLastLocation.getLatitude());
-        lonArray.add(mLastLocation.getLongitude());
-    }
-
     private void dispatchTakePictureIntent() {
         Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
         if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
@@ -242,15 +285,50 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
     }
 
+    public void initSavedData(){
+        try {
+            FileInputStream fis = openFileInput(FILENAME);
+            ObjectInputStream ois = new ObjectInputStream(fis);
+            junkObject = (JunkObject) ois.readObject();
+            fis.close();
+            ois.close();
+            markerText = junkObject.getMarkerString();
+            junk.setLatitude(junkObject.getMarkerLat());
+            junk.setLongitude(junkObject.getMarkerLon());
+            latArray = junkObject.getPolyArrayLat();
+            lonArray = junkObject.getPolyArrayLon();
+            for (int i = 0; i < latArray.size(); i++) {
+                polylineOptions.add(new LatLng(latArray.get(i), lonArray.get(i)));
+            }
+            mMap.addMarker(new MarkerOptions().position(new LatLng(junk.getLatitude(), junk.getLongitude())).title(markerText));
+            mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(junk.getLatitude(), junk.getLongitude()), 17.0f));
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            System.out.println("File not found");
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.out.println("IO Exception");
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+            System.out.println("Class Not Found");
+        }
+    }
+
     public void init() {
         locationRequest = new LocationRequest();
         locationRequest.setInterval(2000);
-        //locationRequest.setInterval(5000);
         locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
         latArray = new ArrayList<Double>();
         lonArray = new ArrayList<Double>();
         marker = (Button) findViewById(R.id.markerButton);
         image = (Button) findViewById(R.id.captureImage);
         imageView = (ImageView) findViewById(R.id.mImageView);
+        junkObject = new JunkObject();
+        junkObject.setMarkerString("");
+        junkObject.setMarkerLat(0);
+        junkObject.setMarkerLon(0);
+        junkObject.setPolyArrayLat(latArray);
+        junkObject.setPolyArrayLon(lonArray);
+        junk = new Location("");
     }
 }
