@@ -14,6 +14,7 @@ public class JunkObject implements Serializable{
     private double markerLat;
     private double markerLon;
     private String markerString;
+    private String photoPath;
 
     public JunkObject(){
 
@@ -59,4 +60,11 @@ public class JunkObject implements Serializable{
         return polyArrayLon;
     }
 
+    public String getPhotoPath() {
+        return photoPath;
+    }
+
+    public void setPhotoPath(String photoPath) {
+        this.photoPath = photoPath;
+    }
 }

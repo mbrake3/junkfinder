@@ -15,7 +15,7 @@
     <Button
         android:id="@+id/captureImage"
         android:layout_width="150dp"
-        android:layout_height="50dp"
+        android:layout_height="45dp"
         android:layout_alignParentEnd="true"
         android:layout_below="@+id/map"
         android:layout_marginEnd="23dp"
@@ -24,7 +24,7 @@
     <Button
         android:id="@+id/markerButton"
         android:layout_width="150dp"
-        android:layout_height="50dp"
+        android:layout_height="45dp"
         android:layout_alignStart="@+id/captureImage"
         android:layout_below="@+id/captureImage"
         android:text="Set Marker" />
@@ -42,8 +42,16 @@
         android:id="@+id/map"
         android:name="com.google.android.gms.maps.SupportMapFragment"
         android:layout_width="match_parent"
-        android:layout_height="375dp"
+        android:layout_height="345dp"
         android:layout_alignParentStart="true"
         tools:context="com.example.findmyjunk.MapsActivity" />
+
+    <Button
+        android:text="Track"
+        android:layout_width="150dp"
+        android:layout_height="45dp"
+        android:id="@+id/trackButton"
+        android:layout_alignStart="@+id/markerButton"
+        android:layout_below="@id/markerButton"/>
 
 </RelativeLayout>
